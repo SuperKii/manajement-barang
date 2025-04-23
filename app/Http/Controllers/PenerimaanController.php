@@ -30,7 +30,7 @@ class PenerimaanController extends Controller
      */
     public function index()
     {
-        $penerimaan = Penerimaan::where('status','PENDING')->get();
+        $penerimaan = Penerimaan::where('status', 'PENDING')->get();
         return view('app.penerimaan.index', compact('penerimaan'));
     }
 
@@ -50,57 +50,70 @@ class PenerimaanController extends Controller
      */
     public function store(Request $request)
     {
-        $validatepenerimaan = $request->validate([
-            'asal' => 'required',
-        ]);
-
-        $catatan_transaksi = new CatatanTransaksi();
-        $catatan_transaksi->tipe = 'PENERIMAAN';
-        $catatan_transaksi->save();
-        $id_transaksi = $catatan_transaksi->id_transaksi;
-
-        $penerimaan = new Penerimaan;
-        $penerimaan->user_id = Auth::user()->id_user;
-        $penerimaan->transaksi_id = $id_transaksi;
-        $penerimaan->asal = $request->asal;
-        $penerimaan->status = 'PENDING';
-        $penerimaan->save();
-
-        $id_penerimaan = $penerimaan->id_terima;
-
-        for ($i = 0; $i < count($request->barang_id); $i++) {
-
-            $tanggal = Carbon::now()->format('Ymd'); // Format YYYYMMDD (20240225)
-            $barang = Barang::where('id_barang',$request->barang_id[$i])->first();
-            $nama_barang = strtoupper(Str::slug($barang->nama_barang, '_'));
-
-            $count = PenerimaanDetail::where('kode_terima_detail', 'LIKE', "TRM-{$nama_barang}-{$tanggal}-%")->count() + 1;
-
-            // Format Kode: TRM-NAMABARANG-YYYYMMDDXXX
-            $kode_terima_detail = "TRM-{$nama_barang}-{$tanggal}-" . str_pad($count, 3, '0', STR_PAD_LEFT);
-
-            $detail_penerimaan = DB::table('penerimaan_detail')->insert([
-                'kode_terima_detail' =>$kode_terima_detail,
-                'barang_id' => $request->barang_id[$i],
-                'terima_id' => $id_penerimaan,
-                'jumlah' => $request->jumlah[$i],
-                'created_at' => now(),
+        try {
+            $validatepenerimaan = $request->validate([
+                'asal' => 'required',
             ]);
 
-            $nota = Nota::where([['user_id', Auth::user()->id_user], ['barang_id', $request->barang_id[$i]]])->delete();
+            $catatan_transaksi = new CatatanTransaksi();
+            $catatan_transaksi->tipe = 'PENERIMAAN';
+            $catatan_transaksi->save();
+            $id_transaksi = $catatan_transaksi->id_transaksi;
+
+            $penerimaan = new Penerimaan;
+            $penerimaan->user_id = Auth::user()->id_user;
+            $penerimaan->transaksi_id = $id_transaksi;
+            $penerimaan->asal = $request->asal;
+            $penerimaan->status = 'PENDING';
+            $penerimaan->save();
+            // validator
+            if ($catatan_transaksi && $penerimaan == 0) {
+                return redirect()->back()->with('error', 'Gagal membuat data penerimaan');
+            }
+
+            $id_penerimaan = $penerimaan->id_terima;
+
+            for ($i = 0; $i < count($request->barang_id); $i++) {
+
+                $tanggal = Carbon::now()->format('Ymd'); // Format YYYYMMDD (20240225)
+                $barang = Barang::where('id_barang', $request->barang_id[$i])->first();
+                $nama_barang = strtoupper(Str::slug($barang->nama_barang, '_'));
+
+                $count = PenerimaanDetail::where('kode_terima_detail', 'LIKE', "TRM-{$nama_barang}-{$tanggal}-%")->count() + 1;
+
+                // Format Kode: TRM-NAMABARANG-YYYYMMDDXXX
+                $kode_terima_detail = "TRM-{$nama_barang}-{$tanggal}-" . str_pad($count, 3, '0', STR_PAD_LEFT);
+
+                $detail_penerimaan = DB::table('penerimaan_detail')->insert([
+                    'kode_terima_detail' => $kode_terima_detail,
+                    'barang_id' => $request->barang_id[$i],
+                    'terima_id' => $id_penerimaan,
+                    'jumlah' => $request->jumlah[$i],
+                    'created_at' => now(),
+                ]);
+                // validator
+                if ($detail_penerimaan == 0) {
+                    return redirect()->back()->with('error', 'Gagal membuat data detail penerimaan');
+                }
+
+                $nota = Nota::where([['user_id', Auth::user()->id_user], ['barang_id', $request->barang_id[$i]]])->delete();
+                // validator
+                if ($nota == 0) {
+                    return redirect()->back()->with('error', 'Gagal menghapus data nota penerimaan');
+                }
+            }
+
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Menerima Barang',
+                'Menerima Barang Dari  ' . $request->asal
+            );
+
+            return redirect()->route('penerimaanIndex')->with('success', 'Berhasil membuat data penerimaan');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database 
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat membuat data penerimaan.');
         }
-
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Menerima Barang',
-            'Menerima Barang Dari  ' . $request->asal
-        );
-
-        
-
-
-
-        return redirect()->route('penerimaanIndex');
     }
 
     /**
@@ -108,9 +121,9 @@ class PenerimaanController extends Controller
      */
     public function show(string $id)
     {
-        $data_penerimaan = Penerimaan::where('id_terima',$id)->first();
-        $detail = PenerimaanDetail::where('terima_id',$id)->get();
-        return view('app.penerimaan.detail.index',compact('data_penerimaan','detail'));
+        $data_penerimaan = Penerimaan::where('id_terima', $id)->first();
+        $detail = PenerimaanDetail::where('terima_id', $id)->get();
+        return view('app.penerimaan.detail.index', compact('data_penerimaan', 'detail'));
     }
 
     /**

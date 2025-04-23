@@ -14,7 +14,7 @@ class NotaController extends Controller
      */
     public function index()
     {
-    //
+        //
     }
 
     /**
@@ -31,17 +31,26 @@ class NotaController extends Controller
      */
     public function store(Request $request)
     {
-        $validateNota = $request->validate([
-            'barang_id' => 'required',
-            'jumlah' => 'required' 
-        ]);
+        try {
+            $validateNota = $request->validate([
+                'barang_id' => 'required',
+                'jumlah' => 'required'
+            ]);
 
-        $data = $request->all();
-        $data['user_id'] = Auth::user()->id_user;
+            $data = $request->all();
+            $data['user_id'] = Auth::user()->id_user;
 
-        $createNota = Nota::create($data);
+            $createNota = Nota::create($data);
 
-        return redirect()->back();
+            if($createNota == 0) {
+                return redirect()->back()->with('error','Gagal membuat nota');
+            }
+
+            return redirect()->back()->with('success', 'Berhasil membuat nota');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database 
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat membuat nota.');
+        }
     }
 
     /**
@@ -71,8 +80,5 @@ class NotaController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
-    {
-        
-    }
+    public function destroy(string $id) {}
 }

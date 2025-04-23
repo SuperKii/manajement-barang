@@ -44,20 +44,33 @@ class KategoriController extends Controller
      */
     public function store(Request $request)
     {
-        $kategori = $request->validate([
-            'nama_kategori' => 'required',
-        ]);
+        try {
+            $kategori = $request->validate([
+                'nama_kategori' => 'required',
+            ]);
 
-        Kategori::create($kategori);
+            $store = Kategori::create($kategori);
 
-        // Log Activity
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Tambah Kategori',
-            'Menambahkan Kategori ' . $request->nama_kategori
-        );
+            if ($store == 0) {
+                return redirect()->back()->with('error', 'Gagal Menambah Data Kategori');
+            }
 
-        return redirect()->route('kategoriIndex');
+            // Log Activity
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Tambah Kategori',
+                'Menambahkan Kategori ' . $request->nama_kategori
+            );
+
+            return redirect()->route('kategoriIndex')->with('success', 'Berhasil Menambah Data Kategori');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database 
+            if ($e->getCode() == 23000) {
+                return redirect()->back()->with('error', 'Kolom nama kategori tidak boleh kosong.');
+            }
+
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat Menambah kategori.');
+        }
     }
 
     /**
@@ -82,21 +95,34 @@ class KategoriController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $dataKategori = [
-            'nama_kategori' => $request->nama_kategori,
-        ];
-        $oldData = (Kategori::where('id_kategori',$id)->first())->toArray();
-        $proses = Kategori::where('id_kategori', $id)->update($dataKategori);
-        $newData = (Kategori::where('id_kategori',$id)->first())->toArray();
+        try {
+            $dataKategori = [
+                'nama_kategori' => $request->nama_kategori,
+            ];
+            $oldData = (Kategori::where('id_kategori', $id)->first())->toArray();
+            $proses = Kategori::where('id_kategori', $id)->update($dataKategori);
+            $newData = (Kategori::where('id_kategori', $id)->first())->toArray();
 
-        // Log Activity
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Mengubah Kategori',
-            'Mengubah Kategori ' . $oldData['nama_kategori'] . ' -> ' . $newData['nama_kategori']
-        );
+            if ($proses == 0) {
+                return redirect()->back()->with('error', 'Gagal Mengubah Data Kategori');
+            }
 
-        return redirect()->route('kategoriIndex');
+            // Log Activity
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Mengubah Kategori',
+                'Mengubah Kategori ' . $oldData['nama_kategori'] . ' -> ' . $newData['nama_kategori']
+            );
+
+            return redirect()->route('kategoriIndex')->with('success', 'Berhasil Mengubah Data Kategori');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database 
+            if ($e->getCode() == 23000) {
+                return redirect()->back()->with('error', 'Kolom nama kategori tidak boleh kosong.');
+            }
+
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat Mengedit kategori.' . $e);
+        }
     }
 
     /**
@@ -104,16 +130,32 @@ class KategoriController extends Controller
      */
     public function destroy(string $id)
     {
-        $oldData = (Kategori::where('id_kategori',$id)->first())->toArray();
-        $kategoriDel = Kategori::where('id_kategori', $id)->delete();
+        try {
+            $oldData = (Kategori::where('id_kategori', $id)->first())->toArray();
+            // Hapus data kategori berdasarkan ID
+            $kategoriDel = Kategori::where('id_kategori', $id)->delete();
 
-        // Log Activity
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Menghapus Kategori',
-            'Menghapus Kategori ' . $oldData['nama_kategori']
-        );
+            // Cek apakah data berhasil dihapus atau tidak
+            if ($kategoriDel == 0) {
+                return redirect()->back()->with('error', 'Data gagal dihapus.');
+            }
 
-        return redirect()->route('kategoriIndex');
+            // Log Activity
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Menghapus Kategori',
+                'Menghapus Kategori ' . $oldData['nama_kategori']
+            );
+
+            // Jika berhasil
+            return redirect()->route('kategoriIndex')->with('success', 'Data berhasil dihapus.');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database 
+            if ($e->getCode() == 23000) {
+                return redirect()->back()->with('error', 'Kategori tidak bisa dihapus karena masih digunakan oleh data barang.');
+            }
+
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat menghapus kategori.');
+        }
     }
 }

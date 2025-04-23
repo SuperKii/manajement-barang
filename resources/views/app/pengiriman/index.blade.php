@@ -16,7 +16,7 @@
                 <thead>
                     <tr>
                         <th>No</th>
-                        <th>Kode Terima</th>
+                        <th>Kode Kirim</th>
                         <th>Nama User</th>
                         <th>Tujuan</th>
                         <th>Status</th>

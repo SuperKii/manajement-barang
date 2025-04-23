@@ -44,34 +44,43 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        $user = $request->validate([
-            'nama' => 'required',
-            'email' => 'required',
-            'password' => 'required',
-            'role' => 'required',
-            'alamat' => 'required',
-            'no_hp' => 'required',
-            'foto_profile' => 'required',
-        ]);
-        $user = $request->all();
-        if ($request->has('foto_profile')) {
-            $foto_profile = $request->file('foto_profile');
-            $nama_foto_profile =  $request->nama . '.' . $foto_profile->getClientOriginalExtension();
-            $foto_profile->move('foto_profile', $nama_foto_profile);
-            $user['foto_profile'] = $nama_foto_profile;
+        try {
+            $user = $request->validate([
+                'nama' => 'required',
+                'email' => 'required',
+                'password' => 'required',
+                'role' => 'required',
+                'alamat' => 'required',
+                'no_hp' => 'required',
+                'foto_profile' => 'required',
+            ]);
+            $user = $request->all();
+            if ($request->has('foto_profile')) {
+                $foto_profile = $request->file('foto_profile');
+                $nama_foto_profile =  $request->nama . '.' . $foto_profile->getClientOriginalExtension();
+                $foto_profile->move('foto_profile', $nama_foto_profile);
+                $user['foto_profile'] = $nama_foto_profile;
+            }
+
+            $user['password'] = Hash::make($request->password);
+
+            $store = User::create($user);
+
+            if ($store == 0) {
+                return redirect()->back()->with('error', 'Gagal Menambah Data user');
+            }
+
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Tambah User',
+                'Menambahkan User ' . $request->nama
+            );
+
+            return redirect()->route('userIndex')->with('success', 'Berhasil menambah data user');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat menambah data user.');
         }
-
-        $user['password'] = Hash::make($request->password);
-
-        $store = User::create($user);
-
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Tambah User',
-            'Menambahkan User ' . $request->nama
-        );
-
-        return redirect()->route('userIndex');
     }
 
     /**
@@ -97,40 +106,49 @@ class UserController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $user = $request->validate([
-            'nama' => 'required',
-            'email' => 'required',
-            'alamat' => 'required',
-            'no_hp' => 'required',
-        ]);
-        $updateUser = User::where('id_user', $id)->first();
-        $updateUser['nama'] = $request->nama;
-        $updateUser['email'] = $request->email;
-        $updateUser['alamat'] = $request->alamat;
-        $updateUser['no_hp'] = $request->no_hp;
-        if ($request->has('foto_profile')) {
-            File::delete('foto_profile/' . $updateUser->foto_profile);
-            $foto_profile = $request->file('foto_profile');
-            $nama_foto =  $request->nama . '.' . $foto_profile->getClientOriginalExtension();
-            $foto_profile->move('foto_profile', $nama_foto);
-            $updateUser['foto_profile'] = $nama_foto;
-        } else {
-            unset($updateUser['foto_profile']);
+        try {
+            $user = $request->validate([
+                'nama' => 'required',
+                'email' => 'required',
+                'alamat' => 'required',
+                'no_hp' => 'required',
+            ]);
+            $updateUser = User::where('id_user', $id)->first();
+            $updateUser['nama'] = $request->nama;
+            $updateUser['email'] = $request->email;
+            $updateUser['alamat'] = $request->alamat;
+            $updateUser['no_hp'] = $request->no_hp;
+            if ($request->has('foto_profile')) {
+                File::delete('foto_profile/' . $updateUser->foto_profile);
+                $foto_profile = $request->file('foto_profile');
+                $nama_foto =  $request->nama . '.' . $foto_profile->getClientOriginalExtension();
+                $foto_profile->move('foto_profile', $nama_foto);
+                $updateUser['foto_profile'] = $nama_foto;
+            } else {
+                unset($updateUser['foto_profile']);
+            }
+
+            if (isset($request->password)) {
+                $updateUser['password'] = Hash::make($request->password);
+            }
+
+            $updateUser->save();
+
+            if ($updateUser == 0) {
+                return redirect()->back()->with('error', 'Gagal mengubah Data user');
+            }
+
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Mengubah User',
+                'Mengubah Data User ' . $request->nama
+            );
+
+            return redirect()->route('userIndex')->with('success', 'Berhasil mengubah data user');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat mengubah data user.');
         }
-
-        if (isset($request->password)) {
-            $updateUser['password'] = Hash::make($request->password);
-        }
-
-        $updateUser->save();
-
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Mengubah User',
-            'Mengubah Data User ' . $request->nama
-        );
-
-        return redirect()->route('userIndex');
     }
 
     /**
@@ -138,18 +156,27 @@ class UserController extends Controller
      */
     public function destroy(string $id)
     {
-        $deleteFoto = User::where('id_user', $id)->first();
-        $oldData = (User::where('id_user', $id)->first())->toArray();
-        File::delete('foto_profile/' . $deleteFoto->foto_barang);
+        try {
 
-        $delete = User::where('id_user', $id)->delete();
+            $deleteFoto = User::where('id_user', $id)->first();
+            $oldData = (User::where('id_user', $id)->first())->toArray();
+            File::delete('foto_profile/' . $deleteFoto->foto_barang);
 
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Menghapus User',
-            'Menghapus User ' . $oldData['nama']
-        );
+            $delete = User::where('id_user', $id)->delete();
+            if ($delete == 0) {
+                return redirect()->back()->with('error', 'Gagal menghapus data user');
+            }
 
-        return redirect()->back();
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Menghapus User',
+                'Menghapus User ' . $oldData['nama']
+            );
+
+            return redirect()->back()->with('success', 'Berhasil menghapus data user');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat menghapus data user.');
+        }
     }
 }

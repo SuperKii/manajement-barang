@@ -30,7 +30,7 @@ class PengirimanController extends Controller
      */
     public function index()
     {
-        $pengiriman = Pengiriman::where('status','PENDING')->get();
+        $pengiriman = Pengiriman::where('status', 'PENDING')->get();
 
         return view('app.pengiriman.index', compact('pengiriman'));
     }
@@ -51,53 +51,70 @@ class PengirimanController extends Controller
      */
     public function store(Request $request)
     {
-        $validatepengiriman = $request->validate([
-            'tujuan' => 'required',
+        try {
+            $validatepengiriman = $request->validate([
+                'tujuan' => 'required',
 
-        ]);
-
-        $catatan_transaksi = new CatatanTransaksi();
-        $catatan_transaksi->tipe = 'PENGIRIMAN';
-        $catatan_transaksi->save();
-        $id_transaksi = $catatan_transaksi->id_transaksi;
-
-        $pengiriman = new Pengiriman();
-        $pengiriman->user_id = Auth::user()->id_user;
-        $pengiriman->transaksi_id = $id_transaksi;
-        $pengiriman->tujuan = $request->tujuan;
-        $pengiriman->status = 'PENDING';
-        $pengiriman->save();
-
-        $id_pengiriman = $pengiriman->id_kirim;
-
-        for ($i = 0; $i < count($request->barang_id); $i++) {
-            $tanggal = Carbon::now()->format('Ymd'); // Format YYYYMMDD (20240225)
-            $barang = Barang::where('id_barang',$request->barang_id[$i])->first();
-            $nama_barang = strtoupper(Str::slug($barang->nama_barang, '_'));
-
-            $count = PengirimanDetail::where('kode_kirim_detail', 'LIKE', "KRM-{$nama_barang}-{$tanggal}-%")->count() + 1;
-
-            // Format Kode: KRM-NAMABARANG-YYYYMMDDXXX
-            $kode_kirim_detail = "KRM-{$nama_barang}-{$tanggal}-" . str_pad($count, 3, '0', STR_PAD_LEFT);
-
-            $detail_pengiriman = DB::table('pengiriman_detail')->insert([
-                'kode_kirim_detail' =>$kode_kirim_detail,
-                'barang_id' => $request->barang_id[$i],
-                'kirim_id' => $id_pengiriman,
-                'jumlah' => $request->jumlah[$i],
-                'created_at' => now(),
             ]);
 
-            $nota = Nota::where([['user_id', Auth::user()->id_user], ['barang_id', $request->barang_id[$i]]])->delete();
+            $catatan_transaksi = new CatatanTransaksi();
+            $catatan_transaksi->tipe = 'PENGIRIMAN';
+            $catatan_transaksi->save();
+            $id_transaksi = $catatan_transaksi->id_transaksi;
+
+            $pengiriman = new Pengiriman();
+            $pengiriman->user_id = Auth::user()->id_user;
+            $pengiriman->transaksi_id = $id_transaksi;
+            $pengiriman->tujuan = $request->tujuan;
+            $pengiriman->status = 'PENDING';
+            $pengiriman->save();
+
+            // validator
+            if ($catatan_transaksi && $pengiriman == 0) {
+                return redirect()->back()->with('error', 'Gagal membuat data pengiriman');
+            }
+
+            $id_pengiriman = $pengiriman->id_kirim;
+
+            for ($i = 0; $i < count($request->barang_id); $i++) {
+                $tanggal = Carbon::now()->format('Ymd'); // Format YYYYMMDD (20240225)
+                $barang = Barang::where('id_barang', $request->barang_id[$i])->first();
+                $nama_barang = strtoupper(Str::slug($barang->nama_barang, '_'));
+
+                $count = PengirimanDetail::where('kode_kirim_detail', 'LIKE', "KRM-{$nama_barang}-{$tanggal}-%")->count() + 1;
+
+                // Format Kode: KRM-NAMABARANG-YYYYMMDDXXX
+                $kode_kirim_detail = "KRM-{$nama_barang}-{$tanggal}-" . str_pad($count, 3, '0', STR_PAD_LEFT);
+
+                $detail_pengiriman = DB::table('pengiriman_detail')->insert([
+                    'kode_kirim_detail' => $kode_kirim_detail,
+                    'barang_id' => $request->barang_id[$i],
+                    'kirim_id' => $id_pengiriman,
+                    'jumlah' => $request->jumlah[$i],
+                    'created_at' => now(),
+                ]);
+                //validator
+                if ($detail_pengiriman == 0) {
+                    return redirect()->back()->with('error', 'Gagal membuat data detail pengiriman');
+                }
+
+                $nota = Nota::where([['user_id', Auth::user()->id_user], ['barang_id', $request->barang_id[$i]]])->delete();
+                if ($nota == 0) {
+                    return redirect()->back()->with('error', 'Gagal menghapus data nota pengiriman');
+                }
+            }
+
+            $this->logActivity(
+                Auth::user()->id_user,
+                'Mengirim Barang',
+                'Mengirim Barang Ke  ' . $request->tujuan
+            );
+
+            return redirect()->route('pengirimanIndex')->with('success', 'Berhasil membuat data pengiriman');
+        } catch (\Exception $e) {
+            // Kalau ada error dari database 
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat membuat data pengiriman.');
         }
-
-        $this->logActivity(
-            Auth::user()->id_user,
-            'Mengirim Barang',
-            'Mengirim Barang Ke  ' . $request->tujuan
-        );
-
-        return redirect()->route('pengirimanIndex');
     }
 
     /**
@@ -105,9 +122,9 @@ class PengirimanController extends Controller
      */
     public function show(string $id)
     {
-        $data_pengiriman = Pengiriman::where('id_kirim',$id)->first();
-        $detail = PengirimanDetail::where('kirim_id',$id)->get();
-        return view('app.pengiriman.detail.index',compact('data_pengiriman','detail'));
+        $data_pengiriman = Pengiriman::where('id_kirim', $id)->first();
+        $detail = PengirimanDetail::where('kirim_id', $id)->get();
+        return view('app.pengiriman.detail.index', compact('data_pengiriman', 'detail'));
     }
 
     /**
